@@ -2576,6 +2576,7 @@ dependencies = [
  "clap-verbosity-flag",
  "clap_complete",
  "console",
+ "daemonize",
  "deno_task_shell",
  "dirs",
  "dunce",
