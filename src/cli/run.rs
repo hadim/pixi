@@ -15,6 +15,7 @@ use crate::progress::await_in_progress;
 use crate::project::environment::get_metadata_env;
 use crate::task::{quote_arguments, CmdArgs, Custom, Task};
 use crate::{environment::get_up_to_date_prefix, Project};
+use daemonize::Daemonize;
 use rattler_shell::{
     activation::{ActivationVariables, Activator, PathModificationBehavior},
     shell::ShellEnum,
@@ -204,6 +205,7 @@ pub async fn execute_script_with_output(
 }
 
 async fn inner_execute(args: Args, project: Project) -> miette::Result<()> {
+<<<<<<< HEAD
 
     // Split 'task' into arguments if it's a single string, supporting commands like:
     // `"test 1 == 0 || echo failed"` or `"echo foo && echo bar"` or `"echo 'Hello World'"`
@@ -217,6 +219,8 @@ async fn inner_execute(args: Args, project: Project) -> miette::Result<()> {
     };
     tracing::debug!("Task parsed from run command: {:?}", task);
 
+=======
+>>>>>>> 7d64172 (fix up tokio runtime init)
     // Get the correctly ordered commands
     let mut ordered_commands = order_tasks(task, &project)?;
 
@@ -281,7 +285,7 @@ async fn inner_execute(args: Args, project: Project) -> miette::Result<()> {
 
 /// CLI entry point for `pixi run`
 /// When running the sigints are ignored and child can react to them. As it pleases.
-pub async fn execute(args: Args) -> miette::Result<()> {
+pub fn execute(args: Args) -> miette::Result<()> {
     let project = Project::load_or_else_discover(args.manifest_path.as_deref())?;
 
     if args.detach {
@@ -292,18 +296,15 @@ pub async fn execute(args: Args) -> miette::Result<()> {
             .pid_file("/tmp/pixi.pid")
             .stdout(stdout)
             .stderr(stderr)
-            // give execution privileges to be able to execute activation!
             .umask(0o027) // Set umask, `0o027` by default.
             .chown_pid_file(true)
             .working_directory(project.root());
-            // .privileged_action(|| {
-            //     inner_execute(args).await?;
-            // });
 
         match daemonize.start() {
             Ok(_) => println!("Daemonized with success"),
             Err(e) => eprintln!("Error, {}", e),
         }
+<<<<<<< HEAD
 
         println!("Daemonized, now executing");
 
@@ -315,9 +316,14 @@ pub async fn execute(args: Args) -> miette::Result<()> {
         println!("Done 2 {:?}", res);
     } else {
         inner_execute(args, project).await?;
+=======
+>>>>>>> 7d64172 (fix up tokio runtime init)
     }
-    println!("Done");
-    Ok(())
+
+    // We need to create a new runtime just in case we are a new process
+    // after daemonize fork.
+    let rt = tokio::runtime::Runtime::new().into_diagnostic()?;
+    rt.block_on(async move { inner_execute(args, project).await })
 }
 
 /// Determine the environment variables to use when executing a command. This method runs the
@@ -329,19 +335,18 @@ pub async fn get_task_env(
     frozen: bool,
     locked: bool,
 ) -> miette::Result<HashMap<String, String>> {
-
     // Get the prefix which we can then activate.
     let prefix = get_up_to_date_prefix(project, frozen, locked).await?;
 
     // Get environment variables from the activation
-    // let activation_env = run_activation_async(project, prefix).await?;
+    let activation_env = run_activation_async(project, prefix).await?;
 
     // Get environment variables from the manifest
     let manifest_env = get_metadata_env(project);
 
     // Construct command environment by concatenating the environments
     Ok(std::env::vars()
-        // .chain(activation_env.into_iter())
+        .chain(activation_env.into_iter())
         .chain(manifest_env.into_iter())
         .collect())
 }
