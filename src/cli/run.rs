@@ -22,7 +22,6 @@ use rattler_shell::{
 };
 use tokio::task::JoinHandle;
 use tracing::Level;
-use daemonize::Daemonize;
 
 
 /// Runs task in project.
@@ -205,7 +204,6 @@ pub async fn execute_script_with_output(
 }
 
 async fn inner_execute(args: Args, project: Project) -> miette::Result<()> {
-<<<<<<< HEAD
 
     // Split 'task' into arguments if it's a single string, supporting commands like:
     // `"test 1 == 0 || echo failed"` or `"echo foo && echo bar"` or `"echo 'Hello World'"`
@@ -219,8 +217,6 @@ async fn inner_execute(args: Args, project: Project) -> miette::Result<()> {
     };
     tracing::debug!("Task parsed from run command: {:?}", task);
 
-=======
->>>>>>> 7d64172 (fix up tokio runtime init)
     // Get the correctly ordered commands
     let mut ordered_commands = order_tasks(task, &project)?;
 
@@ -286,11 +282,16 @@ async fn inner_execute(args: Args, project: Project) -> miette::Result<()> {
 /// CLI entry point for `pixi run`
 /// When running the sigints are ignored and child can react to them. As it pleases.
 pub fn execute(args: Args) -> miette::Result<()> {
+
     let project = Project::load_or_else_discover(args.manifest_path.as_deref())?;
 
     if args.detach {
         let stdout = std::fs::File::create("/tmp/pixi.out").unwrap();
         let stderr = std::fs::File::create("/tmp/pixi.err").unwrap();
+
+        println!("hello world");
+
+
 
         let daemonize = Daemonize::new()
             .pid_file("/tmp/pixi.pid")
@@ -304,26 +305,27 @@ pub fn execute(args: Args) -> miette::Result<()> {
             Ok(_) => println!("Daemonized with success"),
             Err(e) => eprintln!("Error, {}", e),
         }
-<<<<<<< HEAD
 
         println!("Daemonized, now executing");
 
         let res = std::fs::write("test.out", format!("Hello world! {:?} {:?}", args, project));
         println!("Done 1 {:?}", res);
-        let project = Project::load_or_else_discover(args.manifest_path.as_deref())?;
 
-        let res = inner_execute(args, project).await;
-        println!("Done 2 {:?}", res);
+        // inner_execute(args, project);
+        // println!("Done 2 {:?}", res);
+
+        let rt = tokio::runtime::Runtime::new().into_diagnostic()?;
+        rt.block_on(async move { inner_execute(args, project).await })
+
     } else {
-        inner_execute(args, project).await?;
-=======
->>>>>>> 7d64172 (fix up tokio runtime init)
+        // We need to create a new runtime just in case we are a new process
+        // after daemonize fork.
+        let rt = tokio::runtime::Runtime::new().into_diagnostic()?;
+        rt.block_on(async move { inner_execute(args, project).await })
+
     }
 
-    // We need to create a new runtime just in case we are a new process
-    // after daemonize fork.
-    let rt = tokio::runtime::Runtime::new().into_diagnostic()?;
-    rt.block_on(async move { inner_execute(args, project).await })
+
 }
 
 /// Determine the environment variables to use when executing a command. This method runs the
